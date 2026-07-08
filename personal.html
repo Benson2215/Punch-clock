@@ -513,6 +513,10 @@ async function addRecord() {
   if (!shift)   { showToast('請選擇班別', true); return; }
   if (!checkin) { showToast('請填寫到勤時間', true); return; }
 
+  const { data: active } = await db.from('attendance')
+    .select('id').eq('roc_date', todayRocDate()).eq('name', session.name).is('checkout', null);
+  if (active && active.length > 0) { showToast('請先完成退勤才能再次簽到', true); return; }
+
   try { await checkLocation(); }
   catch (msg) { showToast(msg, true); return; }
 
