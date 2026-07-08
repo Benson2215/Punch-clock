@@ -483,17 +483,18 @@
   <!-- Records -->
   <div class="card">
     <div class="toolbar">
-      <div class="card-title" style="margin-bottom:0">今日勤務記錄</div>
+      <div class="card-title" style="margin-bottom:0">勤務記錄</div>
       <div class="toolbar-right no-print">
         <button class="btn-secondary" onclick="showQR()">分享 QR Code</button>
-        <button class="btn-secondary" onclick="exportCSV()">匯出今日 CSV</button>
-        <button class="btn-secondary" onclick="showHistoryExport()">歷史匯出</button>
+        <button class="btn-secondary" onclick="showHistoryExport()">匯出 CSV</button>
         <button class="btn-secondary" onclick="window.print()">列印</button>
         <button class="btn-secondary" onclick="clearAllConfirm()" style="color:#e53e3e;border-color:#fed7d7">清除全部</button>
       </div>
     </div>
     <div class="filter-bar no-print">
-      <label>篩選：</label>
+      <label>日期：</label>
+      <input type="date" id="fil-date" onchange="loadRecords()" style="border:1.5px solid #cbd5e0;border-radius:6px;padding:5px 10px;font-size:0.85rem;font-family:inherit;background:#fff;">
+      <label style="margin-left:8px">篩選：</label>
       <select id="fil-team" onchange="applyFilter()">
         <option value="">全部隊別</option>
         <option>921</option><option>931</option><option>941</option><option>951</option>
@@ -844,11 +845,12 @@ async function loadRecords() {
       '<tr><td colspan="10" class="empty-state">請先完成設定</td></tr>';
     return;
   }
-  const today = todayRocDate();
+  const selDate = document.getElementById('fil-date')?.value;
+  const queryDate = selDate ? toRocDate(selDate) : todayRocDate();
   const { data, error } = await db
     .from('attendance')
     .select('*')
-    .eq('roc_date', today)
+    .eq('roc_date', queryDate)
     .order('id');
   if (error) {
     document.getElementById('records-body').innerHTML =
@@ -931,6 +933,7 @@ function closeQR() {
   document.getElementById('qr-overlay').classList.remove('show');
 }
 
+document.getElementById('fil-date').value = new Date().toISOString().slice(0, 10);
 loadRecords();
 subscribeRealtime();
 </script>
