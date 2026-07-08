@@ -327,6 +327,41 @@
       letter-spacing: 1px;
     }
 
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: #f7fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+    .filter-bar label { font-size: 0.8rem; font-weight: 700; color: #4a5568; white-space: nowrap; }
+    .filter-bar select {
+      border: 1.5px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      background: #fff;
+      color: #1a1a2e;
+    }
+    .btn-reset {
+      background: none;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 0.82rem;
+      font-family: inherit;
+      color: #718096;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-reset:hover { border-color: #0f3460; color: #0f3460; }
+
     /* ── Print ── */
     @media print {
       header { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -373,6 +408,19 @@
         <input type="text" id="f-name" placeholder="請輸入姓名" maxlength="20">
       </div>
       <div class="form-group">
+        <label>隊別</label>
+        <select id="f-team">
+          <option value="">── 請選擇 ──</option>
+          <option>921</option>
+          <option>931</option>
+          <option>941</option>
+          <option>951</option>
+          <option>女生隊</option>
+          <option>研中</option>
+          <option>二技</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>班別</label>
         <select id="f-shift">
           <option value="">── 請選擇 ──</option>
@@ -411,12 +459,32 @@
         <button class="btn-secondary" onclick="clearAllConfirm()" style="color:#e53e3e;border-color:#fed7d7">清除全部</button>
       </div>
     </div>
+    <div class="filter-bar no-print">
+      <label>篩選：</label>
+      <select id="fil-team" onchange="applyFilter()">
+        <option value="">全部隊別</option>
+        <option>921</option><option>931</option><option>941</option><option>951</option>
+        <option>女生隊</option><option>研中</option><option>二技</option>
+      </select>
+      <select id="fil-shift" onchange="applyFilter()">
+        <option value="">全部班別</option>
+        <option>收假</option><option>大班</option><option>小班</option><option>校值日</option>
+      </select>
+      <select id="fil-status" onchange="applyFilter()">
+        <option value="">全部狀態</option>
+        <option value="in">勤務中</option>
+        <option value="out">已退勤</option>
+      </select>
+      <button class="btn-reset" onclick="resetFilter()">重設</button>
+      <span id="fil-count" style="font-size:0.8rem;color:#718096;margin-left:4px"></span>
+    </div>
     <div class="stats-bar" id="stats-bar"></div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>#</th>
+            <th>隊別</th>
             <th>職稱</th>
             <th>姓名</th>
             <th>班別</th>
@@ -428,7 +496,7 @@
           </tr>
         </thead>
         <tbody id="records-body">
-          <tr><td colspan="9" class="empty-state">載入中…</td></tr>
+          <tr><td colspan="10" class="empty-state">載入中…</td></tr>
         </tbody>
       </table>
     </div>
@@ -468,6 +536,30 @@ const db = IS_CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : n
 
 /* ── State ── */
 let records = [];
+let filterTeam = '', filterShift = '', filterStatus = '';
+
+function getFiltered() {
+  return records.filter(r => {
+    if (filterTeam   && r.team  !== filterTeam)  return false;
+    if (filterShift  && r.shift !== filterShift) return false;
+    if (filterStatus === 'in'  &&  r.checkout)   return false;
+    if (filterStatus === 'out' && !r.checkout)   return false;
+    return true;
+  });
+}
+
+function applyFilter() {
+  filterTeam   = document.getElementById('fil-team').value;
+  filterShift  = document.getElementById('fil-shift').value;
+  filterStatus = document.getElementById('fil-status').value;
+  renderTable();
+}
+
+function resetFilter() {
+  filterTeam = filterShift = filterStatus = '';
+  ['fil-team','fil-shift','fil-status'].forEach(id => document.getElementById(id).value = '');
+  renderTable();
+}
 
 /* ── ROC date helpers ── */
 function todayRocDate() {
@@ -527,11 +619,13 @@ function checkLocation() {
 async function addRecord() {
   if (!IS_CONFIGURED) { showToast('請先完成 Supabase 設定', true); return; }
 
+  const team    = document.getElementById('f-team').value;
   const rank    = document.getElementById('f-rank').value;
   const name    = document.getElementById('f-name').value.trim();
   const shift   = document.getElementById('f-shift').value;
   const checkin = document.getElementById('f-checkin').value;
 
+  if (!team)    { showToast('請選擇隊別', true); return; }
   if (!rank)    { showToast('請選擇職稱', true); return; }
   if (!name)    { showToast('請輸入姓名', true); return; }
   if (!shift)   { showToast('請選擇班別', true); return; }
@@ -544,6 +638,7 @@ async function addRecord() {
 
   const { error } = await db.from('attendance').insert({
     roc_date: todayRocDate(),
+    team,
     rank,
     name,
     shift,
@@ -587,12 +682,17 @@ async function deleteRecord(id) {
 /* ── Render ── */
 function renderTable() {
   const tbody = document.getElementById('records-body');
-  if (records.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">尚無簽到記錄</td></tr>';
+  const filtered = getFiltered();
+  const countEl = document.getElementById('fil-count');
+  const isFiltered = filterTeam || filterShift || filterStatus;
+  countEl.textContent = isFiltered ? `顯示 ${filtered.length} / ${records.length} 筆` : '';
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${records.length === 0 ? '尚無簽到記錄' : '無符合篩選條件的記錄'}</td></tr>`;
     renderStats();
     return;
   }
-  tbody.innerHTML = records.map((r, i) => {
+  tbody.innerHTML = filtered.map((r, i) => {
     const badgeClass = `badge badge-${r.shift}`;
     const statusHtml = r.checkout
       ? `<span class="status-out">已退勤</span>`
@@ -607,6 +707,7 @@ function renderTable() {
       : '<span style="color:#a0aec0">—</span>';
     return `<tr>
       <td>${i + 1}</td>
+      <td>${esc(r.team || '—')}</td>
       <td>${esc(r.rank)}</td>
       <td><strong>${esc(r.name)}</strong></td>
       <td><span class="${badgeClass}">${esc(r.shift)}</span></td>
@@ -637,7 +738,7 @@ function renderStats() {
 
 /* ── Clear form ── */
 function clearForm() {
-  ['f-rank', 'f-shift'].forEach(id => document.getElementById(id).value = '');
+  ['f-team', 'f-rank', 'f-shift'].forEach(id => document.getElementById(id).value = '');
   ['f-name', 'f-checkin', 'f-note'].forEach(id => document.getElementById(id).value = '');
 }
 
@@ -654,11 +755,11 @@ async function clearAllConfirm() {
 /* ── Export CSV ── */
 function exportCSV() {
   if (records.length === 0) { showToast('尚無資料可匯出', true); return; }
-  const header = '序號,職稱,姓名,班別,到勤時間,退勤時間,狀態,備註';
-  const rows = records.map((r, i) => {
+  const header = '序號,隊別,職稱,姓名,班別,到勤時間,退勤時間,狀態,備註';
+  const rows = getFiltered().map((r, i) => {
     const checkinFull  = `${r.roc_date || ''} ${r.checkin}`;
     const checkoutFull = r.checkout ? `${r.checkout_date || r.roc_date || ''} ${r.checkout}` : '';
-    return `${i+1},"${r.rank}","${r.name}","${r.shift}","${checkinFull}","${checkoutFull}","${r.checkout ? '已退勤' : '勤務中'}","${r.note || ''}"`;
+    return `${i+1},"${r.team || ''}","${r.rank}","${r.name}","${r.shift}","${checkinFull}","${checkoutFull}","${r.checkout ? '已退勤' : '勤務中'}","${r.note || ''}"`;
   });
   const csv = '﻿' + [header, ...rows].join('\r\n');
   const a = document.createElement('a');
@@ -688,7 +789,7 @@ function esc(s) {
 async function loadRecords() {
   if (!IS_CONFIGURED) {
     document.getElementById('records-body').innerHTML =
-      '<tr><td colspan="9" class="empty-state">請先完成設定</td></tr>';
+      '<tr><td colspan="10" class="empty-state">請先完成設定</td></tr>';
     return;
   }
   const today = todayRocDate();
@@ -699,7 +800,7 @@ async function loadRecords() {
     .order('id');
   if (error) {
     document.getElementById('records-body').innerHTML =
-      `<tr><td colspan="9" class="empty-state" style="color:#c53030">讀取失敗：${esc(error.message)}</td></tr>`;
+      `<tr><td colspan="10" class="empty-state" style="color:#c53030">讀取失敗：${esc(error.message)}</td></tr>`;
     return;
   }
   records = data || [];
