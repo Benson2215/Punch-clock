@@ -220,7 +220,14 @@
 
   <!-- My Records -->
   <div class="card">
-    <div class="card-title">今日紀錄</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:0">我的紀錄</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="fil-date" onchange="loadRecords()"
+          style="border:1.5px solid #cbd5e0;border-radius:6px;padding:5px 10px;font-size:0.85rem;font-family:inherit;background:#fff;">
+        <button class="btn-edit" onclick="exportCSV()">匯出 CSV</button>
+      </div>
+    </div>
     <div id="records-list"><div class="empty-state">載入中…</div></div>
   </div>
 
@@ -414,6 +421,8 @@ function enterApp() {
   document.getElementById('main-app').style.display = 'block';
   document.getElementById('p-name').textContent = session.name;
   document.getElementById('p-sub').textContent  = `${session.team}　${session.rank}`;
+  if (!document.getElementById('fil-date').value)
+    document.getElementById('fil-date').value = new Date().toISOString().slice(0, 10);
   loadRecords();
 }
 
@@ -543,12 +552,35 @@ async function signOut(id) {
 }
 
 /* ── Load & Render ── */
+function selectedRocDate() {
+  const val = document.getElementById('fil-date')?.value;
+  if (!val) return todayRocDate();
+  const [y, m, d] = val.split('-');
+  return `${+y - 1911}/${m}/${d}`;
+}
+
 async function loadRecords() {
   const { data, error } = await db.from('attendance')
-    .select('*').eq('roc_date', todayRocDate()).eq('name', session.name).order('id');
+    .select('*').eq('roc_date', selectedRocDate()).eq('name', session.name).order('id');
   if (error) { showToast('載入失敗：' + error.message, true); return; }
   records = data || [];
   renderList();
+}
+
+function exportCSV() {
+  if (records.length === 0) { showToast('此日期無資料可匯出', true); return; }
+  const header = '序號,隊別,職稱,姓名,班別,到勤時間,退勤時間,狀態,備註';
+  const rows = records.map((r, i) => {
+    const cin  = `${r.roc_date} ${r.checkin}`;
+    const cout = r.checkout ? `${r.checkout_date || r.roc_date} ${r.checkout}` : '';
+    return `${i+1},"${r.team||''}","${r.rank}","${r.name}","${r.shift}","${cin}","${cout}","${r.checkout?'已退勤':'勤務中'}","${r.note||''}"`;
+  });
+  const csv = '﻿' + [header, ...rows].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `個人簽到_${session.name}_${selectedRocDate().replace(/\//g,'')}.csv`;
+  a.click();
+  showToast('CSV 匯出成功');
 }
 
 function renderList() {
