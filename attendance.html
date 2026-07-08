@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>勤務簽到系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+    header h1 { font-size: 1.5rem; letter-spacing: 4px; font-weight: 700; }
+    header .sub { font-size: 0.8rem; color: #a8b2d8; letter-spacing: 2px; margin-top: 2px; }
+    #live-clock {
+      text-align: right;
+      font-size: 2rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #e2e8f0;
+    }
+    #live-date { font-size: 0.85rem; color: #a8b2d8; text-align: right; margin-top: 2px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 16px; }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      padding: 24px 28px;
+      margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #0f3460;
+      border-left: 4px solid #0f3460;
+      padding-left: 10px;
+      margin-bottom: 20px;
+    }
+
+    /* ── Form ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #4a5568;
+      letter-spacing: 1px;
+    }
+    .form-group input, .form-group select {
+      border: 1.5px solid #cbd5e0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background: #f7fafc;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #0f3460;
+      box-shadow: 0 0 0 3px rgba(15,52,96,0.12);
+      background: #fff;
+    }
+    .form-group .time-wrap {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .form-group .time-wrap input { flex: 1; }
+    .btn-now {
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 0.8rem;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      letter-spacing: 1px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-now:hover { background: #16213e; }
+    .btn-now:active { transform: scale(0.97); }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 28px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(15,52,96,0.25);
+    }
+    .btn-primary:hover { background: #16213e; box-shadow: 0 4px 16px rgba(15,52,96,0.3); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-secondary {
+      background: #fff;
+      color: #4a5568;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 8px;
+      padding: 11px 20px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-secondary:hover { border-color: #0f3460; color: #0f3460; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-80px);
+      background: #276749;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 1px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+      z-index: 999;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.error { background: #c53030; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .stat-chip {
+      background: #ebf4ff;
+      border: 1px solid #bee3f8;
+      border-radius: 20px;
+      padding: 5px 16px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #2b6cb0;
+    }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
+    thead tr { background: #0f3460; color: #fff; }
+    thead th {
+      padding: 11px 14px;
+      font-size: 0.82rem;
+      letter-spacing: 2px;
+      font-weight: 700;
+      text-align: center;
+    }
+    tbody tr { transition: background 0.15s; }
+    tbody tr:nth-child(even) { background: #f7fafc; }
+    tbody tr:hover { background: #ebf4ff; }
+    tbody td {
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      text-align: center;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .badge-收假 { background: #fed7d7; color: #c53030; }
+    .badge-大班 { background: #c6f6d5; color: #276749; }
+    .badge-小班 { background: #bee3f8; color: #2b6cb0; }
+    .badge-校值日 { background: #fefcbf; color: #744210; }
+
+    .status-in { color: #276749; font-weight: 700; }
+    .status-out { color: #718096; }
+
+    .btn-signout {
+      background: #e53e3e;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.78rem;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: background 0.2s;
+    }
+    .btn-signout:hover { background: #c53030; }
+
+    .btn-delete {
+      background: none;
+      color: #a0aec0;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .btn-delete:hover { color: #e53e3e; background: #fed7d7; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #a0aec0;
+      font-size: 0.95rem;
+      letter-spacing: 2px;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .toolbar-right { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Setup banner ── */
+    #setup-banner {
+      background: #fffbeb;
+      border: 2px solid #f6ad55;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+      color: #744210;
+      display: none;
+    }
+    #setup-banner strong { display: block; font-size: 1rem; margin-bottom: 4px; }
+
+    /* ── QR Modal ── */
+    #qr-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #qr-overlay.show { display: flex; }
+    #qr-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 36px 40px;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+      max-width: 320px;
+      width: 90%;
+    }
+    #qr-box h2 { font-size: 1rem; letter-spacing: 3px; color: #0f3460; margin-bottom: 4px; }
+    #qr-box p  { font-size: 0.78rem; color: #718096; margin-bottom: 20px; }
+    #qr-img img { width: 220px; height: 220px; }
+    #qr-url {
+      font-size: 0.72rem;
+      color: #4a5568;
+      word-break: break-all;
+      margin-top: 14px;
+      background: #f7fafc;
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    #qr-close {
+      margin-top: 18px;
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 28px;
+      font-size: 0.88rem;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+
+    /* ── Print ── */
+    @media print {
+      header { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none !important; }
+      .card { box-shadow: none; border: 1px solid #ddd; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>勤務簽到系統</h1>
+  </div>
+  <div>
+    <div id="live-clock">--:--:--</div>
+    <div id="live-date">載入中...</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div id="setup-banner">
+    <strong>尚未完成設定</strong>
+    請在 attendance.html 頂端的設定區填入 Supabase URL、API Key 與辦公室座標。
+  </div>
+
+  <!-- Sign-in Form -->
+  <div class="card no-print">
+    <div class="card-title">新增簽到</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>職稱</label>
+        <select id="f-rank">
+          <option value="">── 請選擇 ──</option>
+          <option>中隊長</option>
+          <option>訓導</option>
+          <option>區隊長</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>姓名</label>
+        <input type="text" id="f-name" placeholder="請輸入姓名" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>班別</label>
+        <select id="f-shift">
+          <option value="">── 請選擇 ──</option>
+          <option>收假</option>
+          <option>大班</option>
+          <option>小班</option>
+          <option>校值日</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>到勤時間</label>
+        <div class="time-wrap">
+          <input type="time" id="f-checkin">
+          <button class="btn-now" onclick="setNow('f-checkin')">現在</button>
+        </div>
+      </div>
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label>備註</label>
+        <input type="text" id="f-note" placeholder="選填，如：請假原因、特殊說明…" maxlength="100">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="addRecord()">確認簽到</button>
+      <button class="btn-secondary" onclick="clearForm()">清除</button>
+    </div>
+  </div>
+
+  <!-- Records -->
+  <div class="card">
+    <div class="toolbar">
+      <div class="card-title" style="margin-bottom:0">今日勤務記錄</div>
+      <div class="toolbar-right no-print">
+        <button class="btn-secondary" onclick="showQR()">分享 QR Code</button>
+        <button class="btn-secondary" onclick="exportCSV()">匯出 CSV</button>
+        <button class="btn-secondary" onclick="window.print()">列印</button>
+        <button class="btn-secondary" onclick="clearAllConfirm()" style="color:#e53e3e;border-color:#fed7d7">清除全部</button>
+      </div>
+    </div>
+    <div class="stats-bar" id="stats-bar"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>職稱</th>
+            <th>姓名</th>
+            <th>班別</th>
+            <th>到勤時間</th>
+            <th>退勤時間</th>
+            <th>狀態</th>
+            <th>備註</th>
+            <th class="no-print">操作</th>
+          </tr>
+        </thead>
+        <tbody id="records-body">
+          <tr><td colspan="9" class="empty-state">載入中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- QR Modal -->
+<div id="qr-overlay" onclick="if(event.target===this)closeQR()">
+  <div id="qr-box">
+    <h2>掃描簽到</h2>
+    <p>用手機掃描下方 QR Code</p>
+    <div id="qr-img"></div>
+    <div id="qr-url"></div>
+    <button id="qr-close" onclick="closeQR()">關閉</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   設定區 — 完成後存檔即可使用
+   ══════════════════════════════════════════════════════ */
+const SUPABASE_URL = 'https://tcacykchwcilayzvlrsu.supabase.co';      // 貼上 Project URL
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjYWN5a2Nod2NpbGF5enZscnN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTIyMDUsImV4cCI6MjA5OTA2ODIwNX0.vMCdM9Wn76lI7VeXMNXcGzy4qV7Cq0Ky4Tg5avfplPo';         // 貼上 anon public key
+const OFFICE_LAT   = 25.047623;                       // 辦公室緯度（填 0 代表停用 GPS 限制）
+const OFFICE_LNG   = 121.352090;                       // 辦公室經度
+const RADIUS_M     = 500;                     // 打卡範圍（公尺）
+/* ══════════════════════════════════════════════════════ */
+
+const IS_CONFIGURED = SUPABASE_URL !== 'YOUR_PROJECT_URL' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
+if (!IS_CONFIGURED) document.getElementById('setup-banner').style.display = 'block';
+
+const db = IS_CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+/* ── State ── */
+let records = [];
+
+/* ── ROC date helpers ── */
+function todayRocDate() {
+  const d = new Date();
+  return `${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ── Clock ── */
+const WEEKDAY = ['日','一','二','三','四','五','六'];
+function tickClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('live-clock').textContent = `${hh}:${mm}:${ss}`;
+  const roc = now.getFullYear() - 1911;
+  document.getElementById('live-date').textContent =
+    `民國 ${roc} 年 ${String(now.getMonth()+1).padStart(2,'0')} 月 ${String(now.getDate()).padStart(2,'0')} 日  （星期${WEEKDAY[now.getDay()]}）`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+/* ── Set now ── */
+function setNow(id) {
+  const now = new Date();
+  document.getElementById(id).value =
+    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+/* ── GPS ── */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function checkLocation() {
+  return new Promise((resolve, reject) => {
+    if (!OFFICE_LAT && !OFFICE_LNG) { resolve(); return; }
+    if (!navigator.geolocation) { resolve(); return; }
+    showToast('定位中，請稍候…');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const dist = haversine(pos.coords.latitude, pos.coords.longitude, OFFICE_LAT, OFFICE_LNG);
+        if (dist <= RADIUS_M) resolve();
+        else reject(`距離辦公室 ${Math.round(dist)} 公尺，超出打卡範圍（${RADIUS_M} 公尺）`);
+      },
+      () => reject('無法取得位置，請允許定位權限後再試'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+/* ── Add record ── */
+async function addRecord() {
+  if (!IS_CONFIGURED) { showToast('請先完成 Supabase 設定', true); return; }
+
+  const rank    = document.getElementById('f-rank').value;
+  const name    = document.getElementById('f-name').value.trim();
+  const shift   = document.getElementById('f-shift').value;
+  const checkin = document.getElementById('f-checkin').value;
+
+  if (!rank)    { showToast('請選擇職稱', true); return; }
+  if (!name)    { showToast('請輸入姓名', true); return; }
+  if (!shift)   { showToast('請選擇班別', true); return; }
+  if (!checkin) { showToast('請填寫到勤時間', true); return; }
+
+  try { await checkLocation(); }
+  catch (msg) { showToast(msg, true); return; }
+
+  const note = document.getElementById('f-note').value.trim();
+
+  const { error } = await db.from('attendance').insert({
+    roc_date: todayRocDate(),
+    rank,
+    name,
+    shift,
+    checkin,
+    note: note || null
+  });
+
+  if (error) { showToast('簽到失敗：' + error.message, true); return; }
+  clearForm();
+  showToast(`✓ ${name} 簽到成功`);
+  await loadRecords();
+}
+
+/* ── Sign out ── */
+async function signOut(id) {
+  const now = new Date();
+  const roc = now.getFullYear() - 1911;
+  const checkoutDate = `${roc}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+  const checkout = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  try { await checkLocation(); }
+  catch (msg) { showToast(msg, true); return; }
+
+  const rec = records.find(r => r.id === id);
+  const { error } = await db.from('attendance')
+    .update({ checkout, checkout_date: checkoutDate })
+    .eq('id', id);
+
+  if (error) { showToast('退勤失敗：' + error.message, true); return; }
+  showToast(`✓ ${rec?.name || ''} 退勤登記完成`);
+  await loadRecords();
+}
+
+/* ── Delete ── */
+async function deleteRecord(id) {
+  const { error } = await db.from('attendance').delete().eq('id', id);
+  if (error) { showToast('刪除失敗：' + error.message, true); return; }
+  await loadRecords();
+}
+
+/* ── Render ── */
+function renderTable() {
+  const tbody = document.getElementById('records-body');
+  if (records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">尚無簽到記錄</td></tr>';
+    renderStats();
+    return;
+  }
+  tbody.innerHTML = records.map((r, i) => {
+    const badgeClass = `badge badge-${r.shift}`;
+    const statusHtml = r.checkout
+      ? `<span class="status-out">已退勤</span>`
+      : `<span class="status-in">勤務中</span>`;
+    const actionHtml = r.checkout
+      ? `<button class="btn-delete" onclick="deleteRecord(${r.id})" title="刪除">✕</button>`
+      : `<button class="btn-signout" onclick="signOut(${r.id})">退勤</button>
+         <button class="btn-delete" onclick="deleteRecord(${r.id})" title="刪除">✕</button>`;
+    const checkinHtml = `${esc(r.roc_date || '')} ${esc(r.checkin)}`;
+    const checkoutHtml = r.checkout
+      ? `${esc(r.checkout_date || r.roc_date || '')} ${esc(r.checkout)}`
+      : '<span style="color:#a0aec0">—</span>';
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>${esc(r.rank)}</td>
+      <td><strong>${esc(r.name)}</strong></td>
+      <td><span class="${badgeClass}">${esc(r.shift)}</span></td>
+      <td style="white-space:nowrap">${checkinHtml}</td>
+      <td style="white-space:nowrap">${checkoutHtml}</td>
+      <td>${statusHtml}</td>
+      <td style="color:#4a5568;font-size:0.85rem;text-align:left">${r.note ? esc(r.note) : '<span style="color:#a0aec0">—</span>'}</td>
+      <td class="no-print">${actionHtml}</td>
+    </tr>`;
+  }).join('');
+  renderStats();
+}
+
+function renderStats() {
+  const total = records.length;
+  const active = records.filter(r => !r.checkout).length;
+  const out = total - active;
+  const byShift = {};
+  records.forEach(r => { byShift[r.shift] = (byShift[r.shift] || 0) + 1; });
+  const shiftChips = Object.entries(byShift)
+    .map(([k,v]) => `<span class="stat-chip">${k}：${v} 人</span>`).join('');
+  document.getElementById('stats-bar').innerHTML =
+    `<span class="stat-chip">總人數：${total}</span>` +
+    `<span class="stat-chip" style="background:#c6f6d5;border-color:#9ae6b4;color:#276749">勤務中：${active}</span>` +
+    (out ? `<span class="stat-chip" style="background:#e2e8f0;border-color:#cbd5e0;color:#4a5568">已退勤：${out}</span>` : '') +
+    shiftChips;
+}
+
+/* ── Clear form ── */
+function clearForm() {
+  ['f-rank', 'f-shift'].forEach(id => document.getElementById(id).value = '');
+  ['f-name', 'f-checkin', 'f-note'].forEach(id => document.getElementById(id).value = '');
+}
+
+/* ── Clear all ── */
+async function clearAllConfirm() {
+  if (records.length === 0) { showToast('目前沒有記錄', true); return; }
+  if (!confirm(`確定要清除今日全部 ${records.length} 筆記錄？此動作無法復原。`)) return;
+  const { error } = await db.from('attendance').delete().eq('roc_date', todayRocDate());
+  if (error) { showToast('清除失敗：' + error.message, true); return; }
+  showToast('已清除所有記錄');
+  await loadRecords();
+}
+
+/* ── Export CSV ── */
+function exportCSV() {
+  if (records.length === 0) { showToast('尚無資料可匯出', true); return; }
+  const header = '序號,職稱,姓名,班別,到勤時間,退勤時間,狀態,備註';
+  const rows = records.map((r, i) => {
+    const checkinFull  = `${r.roc_date || ''} ${r.checkin}`;
+    const checkoutFull = r.checkout ? `${r.checkout_date || r.roc_date || ''} ${r.checkout}` : '';
+    return `${i+1},"${r.rank}","${r.name}","${r.shift}","${checkinFull}","${checkoutFull}","${r.checkout ? '已退勤' : '勤務中'}","${r.note || ''}"`;
+  });
+  const csv = '﻿' + [header, ...rows].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `勤務簽到_${todayRocDate().replace(/\//g,'')}.csv`;
+  a.click();
+  showToast('CSV 匯出成功');
+}
+
+/* ── Toast ── */
+let toastTimer;
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = isError ? 'error' : '';
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+/* ── Util ── */
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Load & Realtime ── */
+async function loadRecords() {
+  if (!IS_CONFIGURED) {
+    document.getElementById('records-body').innerHTML =
+      '<tr><td colspan="9" class="empty-state">請先完成設定</td></tr>';
+    return;
+  }
+  const today = todayRocDate();
+  const { data, error } = await db
+    .from('attendance')
+    .select('*')
+    .eq('roc_date', today)
+    .order('id');
+  if (error) {
+    document.getElementById('records-body').innerHTML =
+      `<tr><td colspan="9" class="empty-state" style="color:#c53030">讀取失敗：${esc(error.message)}</td></tr>`;
+    return;
+  }
+  records = data || [];
+  renderTable();
+}
+
+function subscribeRealtime() {
+  if (!IS_CONFIGURED) return;
+  db.channel('attendance-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
+      loadRecords();
+    })
+    .subscribe();
+}
+
+/* ── QR Code ── */
+function showQR() {
+  const url = window.location.href;
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  document.getElementById('qr-img').innerHTML = qr.createImgTag(5, 8);
+  document.getElementById('qr-url').textContent = url;
+  document.getElementById('qr-overlay').classList.add('show');
+}
+function closeQR() {
+  document.getElementById('qr-overlay').classList.remove('show');
+}
+
+loadRecords();
+subscribeRealtime();
+</script>
+</body>
+</html>
