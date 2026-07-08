@@ -313,6 +313,38 @@
       border-radius: 6px;
       padding: 8px 10px;
     }
+    /* ── History Modal ── */
+    #hist-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    #hist-overlay.show { display: flex; }
+    #hist-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 36px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+      max-width: 360px;
+      width: 90%;
+    }
+    #hist-box h2 { font-size: 1rem; letter-spacing: 3px; color: #0f3460; margin-bottom: 20px; }
+    .hist-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .hist-row label { font-size: 0.82rem; font-weight: 700; color: #4a5568; }
+    .hist-row input[type=date] {
+      border: 1.5px solid #cbd5e0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      background: #f7fafc;
+    }
+    .hist-actions { display: flex; gap: 10px; margin-top: 20px; }
+
     #qr-close {
       margin-top: 18px;
       background: #0f3460;
@@ -454,7 +486,8 @@
       <div class="card-title" style="margin-bottom:0">今日勤務記錄</div>
       <div class="toolbar-right no-print">
         <button class="btn-secondary" onclick="showQR()">分享 QR Code</button>
-        <button class="btn-secondary" onclick="exportCSV()">匯出 CSV</button>
+        <button class="btn-secondary" onclick="exportCSV()">匯出今日 CSV</button>
+        <button class="btn-secondary" onclick="showHistoryExport()">歷史匯出</button>
         <button class="btn-secondary" onclick="window.print()">列印</button>
         <button class="btn-secondary" onclick="clearAllConfirm()" style="color:#e53e3e;border-color:#fed7d7">清除全部</button>
       </div>
@@ -502,6 +535,25 @@
     </div>
   </div>
 
+</div>
+
+<!-- History Export Modal -->
+<div id="hist-overlay" onclick="if(event.target===this)closeHistoryExport()">
+  <div id="hist-box">
+    <h2>歷史資料匯出</h2>
+    <div class="hist-row">
+      <label>開始日期</label>
+      <input type="date" id="hist-start">
+    </div>
+    <div class="hist-row">
+      <label>結束日期</label>
+      <input type="date" id="hist-end">
+    </div>
+    <div class="hist-actions">
+      <button class="btn-primary" onclick="exportHistory()">匯出 CSV</button>
+      <button class="btn-secondary" onclick="closeHistoryExport()">取消</button>
+    </div>
+  </div>
 </div>
 
 <!-- QR Modal -->
@@ -814,6 +866,55 @@ function subscribeRealtime() {
       loadRecords();
     })
     .subscribe();
+}
+
+/* ── History Export ── */
+function showHistoryExport() {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('hist-start').value = today;
+  document.getElementById('hist-end').value   = today;
+  document.getElementById('hist-overlay').classList.add('show');
+}
+function closeHistoryExport() {
+  document.getElementById('hist-overlay').classList.remove('show');
+}
+
+function toRocDate(isoDate) {
+  const [y, m, d] = isoDate.split('-');
+  return `${+y - 1911}/${m}/${d}`;
+}
+
+async function exportHistory() {
+  const start = document.getElementById('hist-start').value;
+  const end   = document.getElementById('hist-end').value;
+  if (!start || !end) { showToast('請選擇日期範圍', true); return; }
+  if (start > end)    { showToast('開始日期不可晚於結束日期', true); return; }
+
+  showToast('查詢中…');
+  const { data, error } = await db
+    .from('attendance')
+    .select('*')
+    .gte('roc_date', toRocDate(start))
+    .lte('roc_date', toRocDate(end))
+    .order('roc_date')
+    .order('id');
+
+  if (error) { showToast('查詢失敗：' + error.message, true); return; }
+  if (!data || data.length === 0) { showToast('此區間無資料', true); return; }
+
+  const header = '序號,隊別,職稱,姓名,班別,到勤時間,退勤時間,狀態,備註';
+  const rows = data.map((r, i) => {
+    const checkinFull  = `${r.roc_date || ''} ${r.checkin}`;
+    const checkoutFull = r.checkout ? `${r.checkout_date || r.roc_date || ''} ${r.checkout}` : '';
+    return `${i+1},"${r.team || ''}","${r.rank}","${r.name}","${r.shift}","${checkinFull}","${checkoutFull}","${r.checkout ? '已退勤' : '勤務中'}","${r.note || ''}"`;
+  });
+  const csv = '﻿' + [header, ...rows].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `勤務簽到_${start}_${end}.csv`;
+  a.click();
+  showToast(`已匯出 ${data.length} 筆記錄`);
+  closeHistoryExport();
 }
 
 /* ── QR Code ── */
