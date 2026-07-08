@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>個人簽到</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+    header h1 { font-size: 1.4rem; letter-spacing: 3px; font-weight: 700; }
+    header .sub { font-size: 0.78rem; color: #a8b2d8; margin-top: 2px; letter-spacing: 1px; }
+    #live-clock { text-align: right; font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #e2e8f0; }
+    #live-date  { font-size: 0.8rem; color: #a8b2d8; text-align: right; margin-top: 2px; }
+
+    .container { max-width: 600px; margin: 0 auto; padding: 28px 16px; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 1rem; font-weight: 700; letter-spacing: 2px;
+      color: #0f3460; border-left: 4px solid #0f3460;
+      padding-left: 10px; margin-bottom: 20px;
+    }
+
+    /* Name banner */
+    .name-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #ebf4ff; border: 1px solid #bee3f8;
+      border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;
+    }
+    .name-banner .name-label { font-size: 0.8rem; color: #2b6cb0; font-weight: 700; }
+    .name-banner .name-val   { font-size: 1.1rem; font-weight: 700; color: #0f3460; }
+    .btn-change {
+      background: none; border: 1.5px solid #bee3f8; border-radius: 6px;
+      padding: 4px 12px; font-size: 0.78rem; color: #2b6cb0;
+      cursor: pointer; font-family: inherit; transition: border-color 0.2s;
+    }
+    .btn-change:hover { border-color: #0f3460; color: #0f3460; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.82rem; font-weight: 700; color: #4a5568; letter-spacing: 1px; }
+    .form-group select, .form-group input {
+      border: 1.5px solid #cbd5e0; border-radius: 8px;
+      padding: 9px 12px; font-size: 0.95rem; font-family: inherit;
+      background: #f7fafc; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group select:focus, .form-group input:focus {
+      outline: none; border-color: #0f3460;
+      box-shadow: 0 0 0 3px rgba(15,52,96,0.12); background: #fff;
+    }
+    .time-wrap { display: flex; gap: 8px; align-items: center; }
+    .time-wrap input { flex: 1; }
+    .btn-now {
+      background: #0f3460; color: #fff; border: none; border-radius: 8px;
+      padding: 9px 14px; font-size: 0.8rem; font-family: inherit; font-weight: 700;
+      cursor: pointer; white-space: nowrap; letter-spacing: 1px;
+      transition: background 0.2s;
+    }
+    .btn-now:hover { background: #16213e; }
+
+    .btn-primary {
+      background: #0f3460; color: #fff; border: none; border-radius: 8px;
+      padding: 12px 32px; font-size: 1rem; font-family: inherit; font-weight: 700;
+      cursor: pointer; letter-spacing: 2px; width: 100%; margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(15,52,96,0.25);
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-primary:hover { background: #16213e; }
+    .btn-primary:active { transform: scale(0.98); }
+
+    /* Records */
+    .record-item {
+      border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 12px;
+      transition: background 0.15s;
+    }
+    .record-item:hover { background: #f7fafc; }
+    .record-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .record-name { font-size: 1rem; font-weight: 700; color: #0f3460; }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 0.75rem; font-weight: 700;
+    }
+    .badge-收假 { background: #fed7d7; color: #c53030; }
+    .badge-大班 { background: #c6f6d5; color: #276749; }
+    .badge-小班 { background: #bee3f8; color: #2b6cb0; }
+    .badge-校值日 { background: #fefcbf; color: #744210; }
+    .record-times { font-size: 0.85rem; color: #4a5568; margin-bottom: 8px; }
+    .record-times span { margin-right: 16px; }
+    .status-in  { color: #276749; font-weight: 700; font-size: 0.85rem; }
+    .status-out { color: #718096; font-size: 0.85rem; }
+    .btn-signout {
+      background: #e53e3e; color: #fff; border: none; border-radius: 6px;
+      padding: 6px 18px; font-size: 0.82rem; font-family: inherit; font-weight: 700;
+      cursor: pointer; letter-spacing: 1px; transition: background 0.2s;
+    }
+    .btn-signout:hover { background: #c53030; }
+
+    .empty-state { text-align: center; padding: 32px; color: #a0aec0; font-size: 0.9rem; letter-spacing: 2px; }
+
+    /* Name Modal */
+    #name-overlay {
+      position: fixed; inset: 0;
+      background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+      z-index: 2000; display: flex; align-items: center; justify-content: center;
+    }
+    #name-box {
+      background: #fff; border-radius: 16px; padding: 40px 36px;
+      text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+      width: 320px;
+    }
+    #name-box h2 { font-size: 1.1rem; letter-spacing: 3px; color: #0f3460; margin-bottom: 6px; }
+    #name-box p  { font-size: 0.82rem; color: #718096; margin-bottom: 24px; }
+    #name-input {
+      width: 100%; border: 2px solid #cbd5e0; border-radius: 10px;
+      padding: 12px; font-size: 1.1rem; text-align: center;
+      font-family: inherit; margin-bottom: 16px; outline: none;
+      transition: border-color 0.2s;
+    }
+    #name-input:focus { border-color: #0f3460; }
+
+    #toast {
+      position: fixed; top: 24px; left: 50%;
+      transform: translateX(-50%) translateY(-80px);
+      background: #276749; color: #fff; padding: 12px 28px;
+      border-radius: 8px; font-weight: 700; font-size: 0.95rem;
+      letter-spacing: 1px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+      z-index: 999; white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.error { background: #c53030; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>個人簽到</h1>
+    <div class="sub">PERSONAL ATTENDANCE</div>
+  </div>
+  <div>
+    <div id="live-clock">--:--:--</div>
+    <div id="live-date">載入中...</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Sign-in Form -->
+  <div class="card">
+    <div class="card-title">簽到</div>
+    <div class="name-banner" id="name-banner">
+      <div>
+        <div class="name-label">目前使用者</div>
+        <div class="name-val" id="display-name">—</div>
+      </div>
+      <button class="btn-change" onclick="changeName()">更換</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>隊別</label>
+        <select id="f-team">
+          <option value="">── 請選擇 ──</option>
+          <option>921</option><option>931</option><option>941</option><option>951</option>
+          <option>女生隊</option><option>研中</option><option>二技</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>職稱</label>
+        <select id="f-rank">
+          <option value="">── 請選擇 ──</option>
+          <option>中隊長</option><option>訓導</option><option>區隊長</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>班別</label>
+        <select id="f-shift">
+          <option value="">── 請選擇 ──</option>
+          <option>收假</option><option>大班</option><option>小班</option><option>校值日</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>到勤時間</label>
+        <div class="time-wrap">
+          <input type="time" id="f-checkin">
+          <button class="btn-now" onclick="setNow()">現在</button>
+        </div>
+      </div>
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label>備註</label>
+        <input type="text" id="f-note" placeholder="選填" maxlength="100">
+      </div>
+    </div>
+    <button class="btn-primary" onclick="addRecord()">確認簽到</button>
+  </div>
+
+  <!-- My Records -->
+  <div class="card">
+    <div class="card-title">我的紀錄</div>
+    <div id="records-list"><div class="empty-state">載入中…</div></div>
+  </div>
+
+</div>
+
+<!-- Name Modal -->
+<div id="name-overlay">
+  <div id="name-box">
+    <h2>歡迎使用</h2>
+    <p>請輸入您的姓名，之後會自動記住</p>
+    <input type="text" id="name-input" placeholder="請輸入姓名" maxlength="20"
+      onkeydown="if(event.key==='Enter')saveName()">
+    <button class="btn-primary" style="margin-top:0" onclick="saveName()">確認</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   設定區（與 attendance.html 相同）
+   ══════════════════════════════════════════════════════ */
+const SUPABASE_URL = 'https://tcacykchwcilayzvlrsu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjYWN5a2Nod2NpbGF5enZscnN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTIyMDUsImV4cCI6MjA5OTA2ODIwNX0.vMCdM9Wn76lI7VeXMNXcGzy4qV7Cq0Ky4Tg5avfplPo';
+const OFFICE_LAT   = 25.047623;
+const OFFICE_LNG   = 121.352090;
+const RADIUS_M     = 500;
+/* ══════════════════════════════════════════════════════ */
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const NAME_KEY = 'attendance_my_name';
+let myName = localStorage.getItem(NAME_KEY) || '';
+let records = [];
+
+/* ── Name ── */
+function initName() {
+  if (!myName) {
+    document.getElementById('name-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('name-input').focus(), 100);
+  } else {
+    document.getElementById('name-overlay').style.display = 'none';
+    document.getElementById('display-name').textContent = myName;
+    loadRecords();
+  }
+}
+function saveName() {
+  const val = document.getElementById('name-input').value.trim();
+  if (!val) { showToast('請輸入姓名', true); return; }
+  myName = val;
+  localStorage.setItem(NAME_KEY, myName);
+  document.getElementById('name-overlay').style.display = 'none';
+  document.getElementById('display-name').textContent = myName;
+  loadRecords();
+}
+function changeName() {
+  document.getElementById('name-input').value = myName;
+  document.getElementById('name-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('name-input').focus(), 100);
+}
+
+/* ── Clock ── */
+const WEEKDAY = ['日','一','二','三','四','五','六'];
+function tickClock() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('live-clock').textContent = `${hh}:${mm}:${ss}`;
+  const roc = now.getFullYear() - 1911;
+  document.getElementById('live-date').textContent =
+    `民國 ${roc} 年 ${String(now.getMonth()+1).padStart(2,'0')} 月 ${String(now.getDate()).padStart(2,'0')} 日（星期${WEEKDAY[now.getDay()]}）`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+function setNow() {
+  const now = new Date();
+  document.getElementById('f-checkin').value =
+    `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+function todayRocDate() {
+  const d = new Date();
+  return `${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ── GPS ── */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function checkLocation() {
+  return new Promise((resolve, reject) => {
+    if (!OFFICE_LAT && !OFFICE_LNG) { resolve(); return; }
+    if (!navigator.geolocation)     { resolve(); return; }
+    showToast('定位中，請稍候…');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const dist = haversine(pos.coords.latitude, pos.coords.longitude, OFFICE_LAT, OFFICE_LNG);
+        if (dist <= RADIUS_M) resolve();
+        else reject(`距離辦公室 ${Math.round(dist)} 公尺，超出範圍（${RADIUS_M} 公尺）`);
+      },
+      () => reject('無法取得位置，請允許定位權限後再試'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
+
+/* ── Add record ── */
+async function addRecord() {
+  const team    = document.getElementById('f-team').value;
+  const rank    = document.getElementById('f-rank').value;
+  const shift   = document.getElementById('f-shift').value;
+  const checkin = document.getElementById('f-checkin').value;
+
+  if (!myName)  { showToast('請先設定姓名', true); return; }
+  if (!team)    { showToast('請選擇隊別', true); return; }
+  if (!rank)    { showToast('請選擇職稱', true); return; }
+  if (!shift)   { showToast('請選擇班別', true); return; }
+  if (!checkin) { showToast('請填寫到勤時間', true); return; }
+
+  try { await checkLocation(); }
+  catch (msg) { showToast(msg, true); return; }
+
+  const note = document.getElementById('f-note').value.trim();
+  const { error } = await db.from('attendance').insert({
+    roc_date: todayRocDate(), team, rank, name: myName, shift, checkin, note: note || null
+  });
+
+  if (error) { showToast('簽到失敗：' + error.message, true); return; }
+  document.getElementById('f-team').value = '';
+  document.getElementById('f-rank').value = '';
+  document.getElementById('f-shift').value = '';
+  document.getElementById('f-checkin').value = '';
+  document.getElementById('f-note').value = '';
+  showToast(`✓ ${myName} 簽到成功`);
+  await loadRecords();
+}
+
+/* ── Sign out ── */
+async function signOut(id) {
+  const now = new Date();
+  const roc = now.getFullYear() - 1911;
+  const checkoutDate = `${roc}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+  const checkout = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  try { await checkLocation(); }
+  catch (msg) { showToast(msg, true); return; }
+
+  const { error } = await db.from('attendance')
+    .update({ checkout, checkout_date: checkoutDate })
+    .eq('id', id)
+    .eq('name', myName);
+
+  if (error) { showToast('退勤失敗：' + error.message, true); return; }
+  showToast('✓ 退勤登記完成');
+  await loadRecords();
+}
+
+/* ── Load ── */
+async function loadRecords() {
+  if (!myName) return;
+  const { data, error } = await db
+    .from('attendance')
+    .select('*')
+    .eq('roc_date', todayRocDate())
+    .eq('name', myName)
+    .order('id');
+  if (error) { showToast('載入失敗：' + error.message, true); return; }
+  records = data || [];
+  renderList();
+}
+
+/* ── Render ── */
+function renderList() {
+  const el = document.getElementById('records-list');
+  if (records.length === 0) {
+    el.innerHTML = '<div class="empty-state">今日尚無簽到記錄</div>';
+    return;
+  }
+  el.innerHTML = records.map(r => {
+    const checkinFull  = `${r.roc_date} ${r.checkin}`;
+    const checkoutFull = r.checkout ? `${r.checkout_date || r.roc_date} ${r.checkout}` : null;
+    return `<div class="record-item">
+      <div class="record-top">
+        <div><span class="record-name">${esc(r.name)}</span>　<span class="badge badge-${r.shift}">${esc(r.shift)}</span></div>
+        ${r.checkout
+          ? `<span class="status-out">已退勤</span>`
+          : `<button class="btn-signout" onclick="signOut(${r.id})">退勤</button>`}
+      </div>
+      <div class="record-times">
+        <span>到勤　${esc(checkinFull)}</span>
+        ${checkoutFull ? `<span>退勤　${esc(checkoutFull)}</span>` : ''}
+      </div>
+      ${r.note ? `<div style="font-size:0.82rem;color:#718096">${esc(r.note)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ── Toast & Util ── */
+let toastTimer;
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = isError ? 'error' : '';
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+initName();
+</script>
+</body>
+</html>

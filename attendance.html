@@ -313,6 +313,42 @@
       border-radius: 6px;
       padding: 8px 10px;
     }
+    /* ── PIN Overlay ── */
+    #pin-overlay {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #pin-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 44px;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+      width: 320px;
+    }
+    #pin-box h2 { font-size: 1.1rem; letter-spacing: 3px; color: #0f3460; margin-bottom: 6px; }
+    #pin-box p  { font-size: 0.8rem; color: #718096; margin-bottom: 24px; }
+    #pin-input {
+      width: 100%;
+      border: 2px solid #cbd5e0;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 1.4rem;
+      text-align: center;
+      letter-spacing: 8px;
+      font-family: inherit;
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #pin-input:focus { border-color: #0f3460; }
+    #pin-error { color: #c53030; font-size: 0.82rem; min-height: 1.2em; margin-top: 8px; }
+
     /* ── History Modal ── */
     #hist-overlay {
       display: none;
@@ -538,6 +574,17 @@
 
 </div>
 
+<!-- PIN Overlay -->
+<div id="pin-overlay">
+  <div id="pin-box">
+    <h2>管理員登入</h2>
+    <p>請輸入 PIN 碼進入後台</p>
+    <input type="password" id="pin-input" maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter')checkPin()">
+    <button class="btn-primary" style="width:100%" onclick="checkPin()">確認</button>
+    <div id="pin-error"></div>
+  </div>
+</div>
+
 <!-- History Export Modal -->
 <div id="hist-overlay" onclick="if(event.target===this)closeHistoryExport()">
   <div id="hist-box">
@@ -575,15 +622,35 @@
 /* ══════════════════════════════════════════════════════
    設定區 — 完成後存檔即可使用
    ══════════════════════════════════════════════════════ */
-const SUPABASE_URL = 'https://tcacykchwcilayzvlrsu.supabase.co';      // 貼上 Project URL
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjYWN5a2Nod2NpbGF5enZscnN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTIyMDUsImV4cCI6MjA5OTA2ODIwNX0.vMCdM9Wn76lI7VeXMNXcGzy4qV7Cq0Ky4Tg5avfplPo';         // 貼上 anon public key
-const OFFICE_LAT   = 25.047623;                       // 辦公室緯度（填 0 代表停用 GPS 限制）
-const OFFICE_LNG   = 121.352090;                       // 辦公室經度
-const RADIUS_M     = 500;                     // 打卡範圍（公尺）
+const SUPABASE_URL = 'https://tcacykchwcilayzvlrsu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjYWN5a2Nod2NpbGF5enZscnN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0OTIyMDUsImV4cCI6MjA5OTA2ODIwNX0.vMCdM9Wn76lI7VeXMNXcGzy4qV7Cq0Ky4Tg5avfplPo';
+const OFFICE_LAT   = 25.047623;
+const OFFICE_LNG   = 121.352090;
+const RADIUS_M     = 500;
+const ADMIN_PIN    = '0000';                          // 管理員 PIN 碼（可自行修改）
 /* ══════════════════════════════════════════════════════ */
 
 const IS_CONFIGURED = SUPABASE_URL !== 'YOUR_PROJECT_URL' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
 if (!IS_CONFIGURED) document.getElementById('setup-banner').style.display = 'block';
+
+/* ── PIN Auth ── */
+function checkPin() {
+  const val = document.getElementById('pin-input').value;
+  if (val === ADMIN_PIN) {
+    sessionStorage.setItem('admin_auth', '1');
+    document.getElementById('pin-overlay').style.display = 'none';
+  } else {
+    document.getElementById('pin-error').textContent = 'PIN 碼錯誤，請重試';
+    document.getElementById('pin-input').value = '';
+    document.getElementById('pin-input').focus();
+  }
+}
+if (sessionStorage.getItem('admin_auth') !== '1') {
+  document.getElementById('pin-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+} else {
+  document.getElementById('pin-overlay').style.display = 'none';
+}
 
 const db = IS_CONFIGURED ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -921,7 +988,7 @@ async function exportHistory() {
 
 /* ── QR Code ── */
 function showQR() {
-  const url = window.location.href;
+  const url = window.location.href.replace('attendance.html', 'personal.html');
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
